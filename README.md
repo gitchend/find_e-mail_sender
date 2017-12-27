@@ -8,7 +8,7 @@
 
 - 实现算法：朴素贝叶斯
 
-- 软件环境：python 3.6、mysql 5.0.2
+- 软件环境：python 2.7、mysql 5.0.2
 
 - 成员：
 
@@ -112,25 +112,64 @@
 
 6. 记录$P_x$，并找出最大$P_x$所对应的$C_x$，即为算法所判断的发件人。
 
+   ​
+
 #### 代码实现
 
-​	因为实验原始数据太多(1.62 GB)，测试不易，故决定分阶段实现代码，首先实现两个发件人之间的判断，代码稳定之后再进行全部发件人的判断。
+​	因为实验原始数据太多(1.62 GB)，直接在内存中测试不易，故决定利用数据库存贮学习结果，进行测试。
 
 ###### 实现分析
 
-​	原始数据文件夹结构如图：	![深度截图_dde-file-manager_20171113085351](/home/gitchend/Desktop/深度截图_dde-file-manager_20171113085351.png)
+​	原始数据文件夹结构如图：
 
-![深度截图_dde-file-manager_20171113085434](/home/gitchend/Desktop/深度截图_dde-file-manager_20171113085434.png)
+```
 
-![深度截图_dde-file-manager_20171113085522](/home/gitchend/Desktop/深度截图_dde-file-manager_20171113085522.png)
+maildir
+  ├─allen-p
+  │  ├─all_documents
+  │  │	├─1
+  │  │	├─2
+  │  │	└─...
+  │  │
+  │  ├─contacts
+  │  └─...
+  │
+  ├─...
+  │
+  └─zufferli-j
+     └─...
+```
 
 即：根目录-某个用户的文件夹-一些随意的文件夹和以正整数命名的邮件文件-以正整数命名的邮件文件。
 
 ​	用户文件夹是以“用户名字.用户姓氏开头字母”命名，而其下级文件夹命名随意，所以应当先写好读取并处理一个邮件文件的方法，再递归遍历原始数据文件夹，处理每个文件。而算法所需的类名、特征集需从邮件文件里整理出来。
 
-​	邮件文件如下：
+​	邮件文件样例如下：
 
-![深度截图_gedit_20171113090256](/home/gitchend/Desktop/深度截图_gedit_20171113090256.png)![深度截图_gedit_20171113090224](/home/gitchend/Desktop/深度截图_gedit_20171113090224.png)
+```
+Message-ID: <31429551.1075855374433.JavaMail.evans@thyme>
+Date: Fri, 28 Dec 2001 17:19:45 -0800 (PST)
+From: arsystem@mailman.enron.com
+To: k..allen@enron.com
+Subject: Your Approval is Overdue: Access Request for matt.smith@enron.com
+Mime-Version: 1.0
+Content-Type: text/plain; charset=us-ascii
+Content-Transfer-Encoding: 7bit
+X-From: ARSystem <ARSystem@mailman.enron.com>@ENRON
+X-To: Allen, Phillip K. </O=ENRON/OU=NA/CN=RECIPIENTS/CN=PALLEN>
+X-cc: 
+X-bcc: 
+X-Folder: \Phillip_Allen_Jan2002_1\Allen, Phillip K.\Deleted Items
+X-Origin: Allen-P
+X-FileName: pallen (Non-Privileged).pst
+
+This request has been pending your approval for  58 days.  Please click http://itcapps.corp.enron.com/srrs/auth/emailLink.asp?ID=000000000067320&Page=Approval to review and act upon this request.
+Request ID          : 000000000067320
+Request Create Date : 10/11/01 10:24:53 AM
+Requested For       : matt.smith@enron.com
+Resource Name       : Risk Acceptance Forms Local Admin Rights - Permanent
+Resource Type       : Applications
+```
 
 从中我们可以获取到如下信息：
 
@@ -142,135 +181,447 @@
 
 1. MIME协议的邮件头是一组以冒号":"隔开的键值对，每个键值对占一行。
 2. 邮件头和正文以第一个空行为界。
-3. 邮件头中以“X-From”为键的值，即为发件人昵称。
+3. 邮件头中以“X-From”为键的值，即为发件人昵称；以“From”为键的值，即为发件人邮箱账号。根据观察，同一用户可以有不同格式甚至完全不同的昵称和账号，故选用文件夹名作为用户名。
 
 至此，我们已经了解到解析原始邮件文件的方法，规划出实现过程如下：
 
-- 阶段1:
+1. 将所有原始文件分为学习集和测试集。
+2. 遍历学习集。
+3. 将学习集解析出的数据保存到数据库。
+4. 遍历测试集。
+5. 分别从内存和数据库(使用Sql)中算出获得$P_x$所需的值。
+6. 记录$P_x$，并找出最大$P_x$所对应的$C_x$，比较C‘和$C_x$，并记录正确率。
 
-  1. 编写读取并解析单个邮件文件的程序。
-  2. 编写递归遍历某根目录，并读取解析邮件文件的程序。
-  3. 准备一个较小(2个发件人)的原始文件集，分为学习集和测试集。
-  4. 用2中程序遍历3中学习集。
-  5. 在内存中生成各频率表，并维护。
-  6. 用2中程序遍历3中测试集。
-  7. 在内存中算出获得$P_x$所需的值。
-  8. 记录$P_x$，并找出最大$P_x$所对应的$C_x$，比较C‘和$C_x$，并记录正确率。
+###### 具体代码
 
-- 阶段2：
+1. 将所有原始文件分为学习集和测试集。
 
-  1. 将所有原始文件分为学习集和测试集。
+   ```python
+   #prapare.py
 
-  2. 遍历学习集。
+   import random
+   import os
+   import shutil
 
-  3. 将学习集解析出的数据保存到数据库。
+   import global_list
 
-  4. 遍历测试集。
 
-  5. 分别从内存和数据库(使用Sql)中算出获得$P_x$所需的值。
+   def deal(comdir,comdir_test):
+   	fate=random.randint(0,9)
+   	if(fate<2):
+   		shutil.copyfile(comdir, comdir_test)
+   		os.remove(comdir)  
+   	
+   def start(dirPath,dirPath_test):
+   	userlist=os.listdir(dirPath)
+   	for singleuser in userlist:
+   		print(singleuser)
+   		userpath=dirPath+'/'+singleuser
+   		userpath_test=dirPath_test+'/'+singleuser
+   		if not(os.path.exists(userpath_test)):
+   			os.mkdir(userpath_test)
+   		dirlist=os.listdir(userpath)
+   		for singledir in dirlist:
+   			comdir=userpath+'/'+singledir
+   			comdir_test=userpath_test+'/'+singledir
+   			if(os.path.isfile(comdir)):
+   				deal(comdir,comdir_test)
+   			else:
+   				if not(os.path.exists(comdir_test)):
+   					os.mkdir(comdir_test)
+   				filelist=os.listdir(comdir)
+   				for singlefilename in filelist:
+   					comdir2=comdir+'/'+singlefilename
+   					comdir2_test=comdir_test+'/'+singlefilename
+   					if(os.path.isfile(comdir2)):
+   						deal(comdir2,comdir2_test)
+   						
+   start(global_list.mail_dir,global_list.mail_dir_test)
+   ```
 
-  6. 记录$P_x$，并找出最大$P_x$所对应的$C_x$，比较C‘和$C_x$，并记录正确率。
+   该程序遍历了原本的数据文件，并复制所有文件夹。对于其中每个文件，生成随机数，有20%几率复制该文件到测试文件夹，并删除原来的文件。
 
-     ![深度截图_选择区域_20171113202251](/home/gitchend/Desktop/深度截图_选择区域_20171113202251.png)
-
-###### 阶段1
-
-1. 编写读取、解析单个文件的程序。
+1. 读取、解析单个文件的程序。
 
    ```python
    #singlefile.py
 
    import re
-   class Fileinfo:
-   	sender=0
-   	infolist=0
-   	def __init__(self, sender, infolist):
-   		self.sender=sender
-   		self.infolist=infolist
-   	
+
    def dealsingle(filePath):
    	fileObj = open(filePath)
    	try:
    	     allLine = fileObj.readlines()
    	finally:
    	     fileObj.close()
-
-   	for line in allLine:
-   		if(line.startswith('X-From')):
-   			sender=line[8:].strip()
-   			break
-   	allLine=''.join(allLine[allLine.index('\r\n')+1:]).lower()
-   	allLine=re.compile(r'\d|\s|\r\n|\.|\,|\"|\?|\!').split(allLine)
+   	
+   	allLine=''.join(allLine[allLine.index('\n')+1:]).lower()
+   	allLine=re.compile(r'\d|\s|\r\n|\n|\.|\,|\"|\?|\!|\/|\-|\:|\@|\'|\&|\=|\#|\*|\$|\(|\)|\+|\;|\%|\<|\>').split(allLine)
    	allLine=list(set(allLine))
-   	try:
+   	if '' in allLine:
    		allLine.remove('')
-   	except Exception,e:
-       		print e.message
-   	return Fileinfo(sender,allLine)
+   	return allLine
    ```
 
-   该程序定义了一个类`Fileinfo`和一个方法`dealsingle(filePath)`。`Fileinfo`用来该邮件储存发送人和特征集，`dealsingle(filePath)`功能为：传入一个文件的路径，返回该文件的发送人和特征集，并用`Fileinfo`包装。
-
-   方法`dealsingle(filePath)`做了以下操作：
+   该程序定义了一个方法`dealsingle(filePath)`。该方法做了以下操作：
 
    1. 打开文件并读取。
-   2. 找到以”X-From“开头的行，由此得到sender。
-   3. 根据第一个空行切片，去掉文件头，得到正文。
-   4. 将所有字符转为小写。
-   5. 将正文用各种分割符号正则分割，并转为list
-   6. 利用set去重
-   7. 返回由该list和sender生成的Fileinfo
+   2. 根据第一个空行切片，去掉文件头，得到正文。
+   3. 将所有字符转为小写。
+   4. 将正文用各种分割符号正则分割，并转为list
+   5. 利用set去重
+   6. 返回特征集
 
-   测试代码如下：
-
-   ```python
-   a=dealsingle('11.')
-   print a.sender
-   print a.infolist
-   ```
-
-   结果：
-
-   ![深度截图_deepin-terminal_20171113213634](/home/gitchend/Desktop/深度截图_deepin-terminal_20171113213634.png)
-
-2. 编写递归遍历某个文件夹的程序。
+2. 学习
 
    ```python
-   #findsender.py
+   #learn.py
 
    import os
-   import singlefile
 
-   def start(step,dirPath):
-   	dirlist=os.listdir(dirPath)
-   	for singledir in dirlist:
-   		comdir=dirPath+'/'+singledir
-   		if(os.path.isfile(comdir)):
-   			deal(step,comdir)
+   import singlefile
+   import global_list
+
+   def deal(comdir,singleuser):
+   	global_list.fileNum+=1
+   	allLine=singlefile.dealsingle(comdir)
+   	
+   	cursor = global_list.db.cursor()
+   	try:
+   		cursor.execute("select * from c where c='%s'"%(singleuser))
+   		data = cursor.fetchall()
+   		if(data):
+   			cursor.execute("update c set times=times+1 where c='%s'"%(singleuser))
    		else:
-   			filelist=os.listdir(comdir)
-   			for singlefile in filelist:
-   				comdir2=comdir+'/'+singlefile
-   				if(os.path.isfile(comdir2)):
-   					deal(step,comdir2)
-   def deal(step,comdir):
-   	fileinfo=singlefile.dealsingle(comdir)
-   	if step is 0:
-   		print comdir+"|"+fileinfo.sender
-   	elif step is 1:
-   		step1deal(fileinfo)
-   	elif step is 2:
-   		step2deal(fileinfo)
+   			cursor.execute("insert into c(c) values('%s')"%(singleuser))
+   	except Exception:
+   		print("illegal user:"+singleuser)
+   		
+   	for f in allLine:
+   		try:
+   			cursor.execute("select * from cf where c='%s' and f='%s'"%(singleuser,f))
+   			data = cursor.fetchall()
+   			if(data):
+   				cursor.execute("update cf set times=times+1 where c='%s' and f='%s'"%(singleuser,f))
+   			else:
+   				cursor.execute("insert into cf(c,f) values('%s','%s')"%(singleuser,f))
+   		except Exception:
+   			print("illegal string:"+f)
+   	global_list.db.commit()
+   	
+   def learn(dirPath):
+   	userlist=os.listdir(dirPath)
+   	for singleuser in userlist:
+   		print(singleuser)
+   		userpath=dirPath+'/'+singleuser
+   		dirlist=os.listdir(userpath)
+   		for singledir in dirlist:
+   			comdir=userpath+'/'+singledir
+   			if(os.path.isfile(comdir)):
+   				deal(comdir,singleuser)
+   			else:
+   				filelist=os.listdir(comdir)
+   				for singlefilename in filelist:
+   					comdir2=comdir+'/'+singlefilename
+   					if(os.path.isfile(comdir2)):
+   						deal(comdir2,singleuser)
+   	
+   	print(global_list.fileNum)
+   	global_list.db.close()
+   		
+   learn(global_list.mail_dir)
    ```
 
-   该程序为程序入口。定义一个`start(step,dirPath)`方法：传入阶段（step），阶段为0时为测试；传入dirPath，为需要遍历的根目录。调用`singlefile.dealsingle(comdir)`获得单个邮件文件的信息，step为1或2时分别将邮件信息传入阶段1和阶段2的处理方法。
+   递归遍历每个文件，对于每个用户的所有文件，用`singlefile.dealsingle(filePath)`提取出文件中的结果集，将读入的类和特征集存入数据库。如果数据库中已有该数据（C,F或C）则让出现次数(times)增1，若无则创建。
 
-   测试代码：
+   3.测试
 
    ```python
-   start(0,'dickson-s')
+   #test.py
+
+   import os
+   import math
+   from decimal import *
+
+   import singlefile
+   import global_list
+
+   def deal(comdir,singleuser):
+   	global_list.fileNum+=1
+   	allLine=singlefile.dealsingle(comdir)
+   	
+   	PCsumPFClog_max=0
+   	sender_mostlike=""
+   	
+   	
+   	print(singleuser)
+   				
+   	cursor = global_list.db.cursor()
+   	for user_guess in global_list.pcmap:
+   		sumPFClog=0
+   		sumc=global_list.sumfcmap[user_guess]
+   		
+   		for f in allLine:
+   			key=user_guess+":"+f
+   			sumf=0
+   			if(global_list.sumcfmap.has_key(key)):
+   				sumf=global_list.sumcfmap[key]
+   			else:
+   				cursor.execute("select times from cf where c='%s' and f='%s'"%(user_guess,f))
+   				data = cursor.fetchall()
+   				if data:
+   					sumf=data[0][0]
+   					if not sumf:
+   						sumf=Decimal(0.00000001)
+   				else:
+   					sumf=Decimal(0.00000001)
+   				global_list.sumcfmap[key]=sumf
+   			sumPFClog+=math.log(sumf/(sumc*Decimal(1.0)))
+   		PCsumPFClog=sumPFClog+math.log(global_list.pcmap[user_guess])
+   		if(PCsumPFClog>PCsumPFClog_max or PCsumPFClog_max==0):
+   			print("--guess:"+user_guess)
+   			PCsumPFClog_max=PCsumPFClog
+   			sender_mostlike=user_guess
+   	
+   	isMatched=(singleuser==sender_mostlike)
+   	if(singleuser==sender_mostlike):
+   		print(str(global_list.fileNum)+':sender:'+singleuser+'  guess:'+sender_mostlike+"  --matching")
+   		global_list.fileNum_correct+=1
+   	else:
+   		print(str(global_list.fileNum)+':sender:'+singleuser+'  guess:'+sender_mostlike+"  --mismatching")
+   		global_list.fileNum_incorrect+=1
+   	
+   		
+   def	getPC():
+   	getcontext().prec = 5
+   	cursor = global_list.db.cursor()
+   	cursor.execute("select sum(times) from c")
+   	data = cursor.fetchall()
+   	n=data[0][0]
+   	
+   	cursor.execute("select * from c")
+   	data = cursor.fetchall()
+   	for row in data:
+   		global_list.pcmap[row[0]]=row[1]/(n*Decimal(1.0))
+   	
+   	cursor.execute("select * from fc");
+   	data = cursor.fetchall()
+   	for row in data:
+   		global_list.sumfcmap[row[0]]=row[1]
+   	
+   def test(dirPath):
+   	getPC()
+   	userlist=os.listdir(dirPath)
+   	for singleuser in userlist:
+   		userpath=dirPath+'/'+singleuser
+   		dirlist=os.listdir(userpath)
+   		for singledir in dirlist:
+   			comdir=userpath+'/'+singledir
+   			if(os.path.isfile(comdir)):
+   				deal(comdir,singleuser)
+   			else:
+   				filelist=os.listdir(comdir)
+   				for singlefilename in filelist:
+   					comdir2=comdir+'/'+singlefilename
+   					if(os.path.isfile(comdir2)):
+   						deal(comdir2,singleuser)
+   	
+   	global_list.db.close()
+   	print('total:'+global_list.fileNum)
+   	print('matching:'+global_list.fileNum_correct+'   mismatching:'+global_list.fileNum_incorrect)
+   	print('correct rate:'+global_list.fileNum_correct/(1.0*global_list.fileNum))
+
+   	
+   test(global_list.mail_dir_test)
    ```
 
-   结果：
+   根据算法进行测试。因为PC在测试过程中是一直要使用的，所以预先全部读入内存中。将某个类中某个特征出现的次数(CF)从数据库读出，按需存入内存，这样既不会开始运行程序时太慢，也不会以较慢的均匀速度运行，而是会越来越快。
 
-   ​
+   对于PFC连乘，因为PFC是很多小数，小数连乘可能造成下溢出，所以讲所有PFC取对数相加。为防止数学错误(log(0))，对于某个类没有出现过的某个特征（PFC=0），当做这个特征出现过一个极小数次(0.00000001次)。
+
+   4.全局变量
+
+   ```python
+   #global_list.py
+
+   import MySQLdb
+
+   mail_dir='C:/Users/Administrator/Desktop/ml_mail/maildir'
+   mail_dir_test='C:/Users/Administrator/Desktop/ml_mail/maildir_test'
+
+   db = MySQLdb.connect("localhost","root","","findsender")
+
+   fileNum=0
+   fileNum_correct=0
+   fileNum_incorrect=0
+
+   pcmap={}
+   sumcmap={}
+   sumfcmap={}
+   sumcfmap={}
+   ```
+
+   一些文件路径、数据库的配置信息，以及一些需要全局记录的变量。
+
+#### 运行测试
+
+速度稳定后平均每秒可测试3条记录。测试集中共98,774个文件，全部测试完需要9.146小时。由于时间太长，故每次随机选取约200个文件进行测试，多次测试取平均值。取到每个文件的概率约为0.2%。
+
+改进后的代码如下：
+
+```python
+#test_sub.py
+
+import os
+import math
+import random
+from decimal import *
+
+import singlefile
+import global_list
+
+def deal(comdir,singleuser):
+	fate=random.randint(0,999)
+	if(fate>=2):
+		return
+		
+	global_list.fileNum+=1
+	allLine=singlefile.dealsingle(comdir)
+	
+	PCsumPFClog_max=0
+	sender_mostlike=""
+	
+	cursor = global_list.db.cursor()
+	for user_guess in global_list.pcmap:
+		sumPFClog=0
+		sumc=global_list.sumfcmap[user_guess]
+		
+		for f in allLine:
+			key=user_guess+":"+f
+			sumf=0
+			if(global_list.sumcfmap.has_key(key)):
+				sumf=global_list.sumcfmap[key]
+			else:
+				cursor.execute("select times from cf where c='%s' and f='%s'"%(user_guess,f))
+				data = cursor.fetchall()
+				if data:
+					sumf=data[0][0]
+					if not sumf:
+						sumf=Decimal(0.00000001)
+				else:
+					sumf=Decimal(0.00000001)
+				global_list.sumcfmap[key]=sumf
+			sumPFClog+=math.log(sumf/(sumc*Decimal(1.0)))
+		PCsumPFClog=sumPFClog+math.log(global_list.pcmap[user_guess])
+		if(PCsumPFClog>PCsumPFClog_max or PCsumPFClog_max==0):
+			PCsumPFClog_max=PCsumPFClog
+			sender_mostlike=user_guess
+	
+	isMatched=(singleuser==sender_mostlike)
+	if(singleuser==sender_mostlike):
+		print(str(global_list.fileNum)+':sender:'+singleuser+'  guess:'+sender_mostlike+"  --matching")
+		global_list.fileNum_correct+=1
+	else:
+		print(str(global_list.fileNum)+':sender:'+singleuser+'  guess:'+sender_mostlike+"  --mismatching")
+		global_list.fileNum_incorrect+=1
+	
+		
+def	getPC():
+	getcontext().prec = 5
+	cursor = global_list.db.cursor()
+	cursor.execute("select sum(times) from c")
+	data = cursor.fetchall()
+	n=data[0][0]
+	
+	cursor.execute("select * from c")
+	data = cursor.fetchall()
+	for row in data:
+		global_list.pcmap[row[0]]=row[1]/(n*Decimal(1.0))
+	
+	cursor.execute("select * from fc");
+	data = cursor.fetchall()
+	for row in data:
+		global_list.sumfcmap[row[0]]=row[1]
+	
+def test(dirPath):
+	userlist=os.listdir(dirPath)
+	for singleuser in userlist:
+		userpath=dirPath+'/'+singleuser
+		dirlist=os.listdir(userpath)
+		for singledir in dirlist:
+			comdir=userpath+'/'+singledir
+			if(os.path.isfile(comdir)):
+				deal(comdir,singleuser)
+			else:
+				filelist=os.listdir(comdir)
+				for singlefilename in filelist:
+					comdir2=comdir+'/'+singlefilename
+					if(os.path.isfile(comdir2)):
+						deal(comdir2,singleuser)
+	
+	rate=global_list.fileNum_correct/(1.0*global_list.fileNum)
+	print('total:'+str(global_list.fileNum))
+	print('matching:'+str(global_list.fileNum_correct)+'   mismatching:'+str(global_list.fileNum_incorrect))
+	print('correct rate:'+str(rate))
+	global_list.fileNum=global_list.fileNum_correct=global_list.fileNum_incorrect=0
+	return rate
+
+	
+getPC()
+rate_array={};
+for i in range(5):
+	rate_array[i]=test(global_list.mail_dir_test)
+print("\ntest times:"+str(len(rate_array)))
+sum_rate=0.0
+rate_str="rate: "
+for i in range(len(rate_array)):
+	rate_str+=(str(round(rate_array[i],2))+" ")
+	sum_rate+=rate_array[i]
+print(rate_str+"\naverage rate:"+str(round(sum_rate/len(rate_array),2)))
+global_list.db.close()
+
+```
+
+运行结果(略)：
+
+```
+1:sender:allen-p  guess:allen-p  --matching
+2:sender:arnold-j  guess:arnold-j  --matching
+3:sender:arnold-j  guess:whalley-l  --mismatching
+4:sender:arnold-j  guess:arnold-j  --matching
+5:sender:bass-e  guess:farmer-d  --mismatching
+...
+187:sender:watson-k  guess:scott-s  --mismatching
+188:sender:whalley-g  guess:whalley-l  --mismatching
+189:sender:whalley-l  guess:beck-s  --mismatching
+190:sender:whalley-l  guess:beck-s  --mismatching
+191:sender:williams-j  guess:williams-j  --matching
+192:sender:williams-w3  guess:meyers-a  --mismatching
+193:sender:ybarbo-p  guess:watson-k  --mismatching
+194:sender:zipper-a  guess:zipper-a  --matching
+total:194
+matching:113   mismatching:81
+correct rate:0.582474226804
+1:sender:allen-p  guess:allen-p  --matching
+2:sender:arnold-j  guess:arnold-j  --matching
+3:sender:arnold-j  guess:maggi-m  --mismatching
+4:sender:arnold-j  guess:arnold-j  --matching
+5:sender:arnold-j  guess:dasovich-j  --mismatching
+...
+197:sender:williams-j  guess:giron-d  --mismatching
+198:sender:williams-w3  guess:williams-w3  --matching
+199:sender:wolfe-j  guess:scott-s  --mismatching
+200:sender:ybarbo-p  guess:ybarbo-p  --matching
+total:200
+matching:119   mismatching:81
+correct rate:0.595
+
+...
+
+test times:5
+rate: 0.58 0.59 0.58 0.57 0.64
+average rate:0.59
+```
+
+总共进行了5次测试，每次约200个文件，平均识别率为59%左右。
+

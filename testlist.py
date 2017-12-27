@@ -1,3 +1,0 @@
-list={}
-print list['a']
-

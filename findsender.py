@@ -4,8 +4,6 @@ import os
 import singlefile
 import step1
 
-
-
 class mainclass:
 	fileNum=0;
 	fileNumTest=0
@@ -69,8 +67,8 @@ class mainclass:
 		self.test(step,dirPathTest)
 		print self.fileNum
 		print self.fileNumTest
-		
 
+mail_dir='C:\Users\Administrator\Desktop\ml_mail\maildir'
 mainclass().start(1,'maildirsub','maildirsub-test')
 
 
