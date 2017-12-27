@@ -1,18 +1,3 @@
-/*
-Navicat MySQL Data Transfer
-
-Source Server         : pi
-Source Server Version : 50638
-Source Host           : gitchend.cn:3306
-Source Database       : findsender
-
-Target Server Type    : MYSQL
-Target Server Version : 50638
-File Encoding         : 65001
-
-Date: 2017-12-27 15:43:50
-*/
-
 SET FOREIGN_KEY_CHECKS=0;
 
 -- ----------------------------
