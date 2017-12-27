@@ -116,7 +116,7 @@
 
 #### 代码实现
 
-​	因为实验原始数据太多(1.62 GB)，直接在内存中测试不易，故决定利用数据库存贮学习结果，进行测试。
+​	因为实验[原始数据](http://www.cs.cmu.edu/~enron/enron_mail_20150507.tar.gz)太多(1.62 GB)，直接在内存中测试不易，故决定利用数据库存贮学习结果，进行测试。
 
 ###### 实现分析
 
@@ -204,6 +204,7 @@ Resource Type       : Applications
    import shutil
 
    import global_list
+   ```
 
 
    def deal(comdir,comdir_test):
@@ -272,7 +273,7 @@ Resource Type       : Applications
    5. 利用set去重
    6. 返回特征集
 
-2. 学习
+7. 学习
 
    ```python
    #learn.py
